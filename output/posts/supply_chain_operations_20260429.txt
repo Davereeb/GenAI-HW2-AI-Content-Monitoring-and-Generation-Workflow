@@ -1,0 +1,23 @@
+Category: Supply Chain & Operations
+KOL Style: Andrej Karpathy
+Source article: OpenAI models, Codex, and Managed Agents come to AWS
+Source: OpenAI Blog
+Selection: KOL: Andrej Karpathy | combined: 7.7, recency: 8/10, final: 7.76
+Generated: 2026-04-29T15:57:19.405093+00:00
+============================================================
+
+Here’s why AWS-hosted OpenAI models will redefine retail supply chains: 
+
+Most retailers still treat demand forecasting and inventory optimization as separate problems. The new AWS integration changes this. Now, you can deploy GPT-4 for customer intent analysis and Codex for real-time logistics optimization—all within your existing AWS security perimeter.
+
+The key insight? These models create a closed-loop system:
+1. GPT analyzes social/media signals to predict demand spikes
+2. Codex translates this into optimal warehouse allocations
+3. Managed Agents continuously adjust based on fulfillment data
+
+Walmart’s early tests show 12-15% reductions in overstock for seasonal items using similar architectures. But the real advantage isn’t just cost savings—it’s the ability to pivot inventory in days, not weeks, when viral trends emerge.
+
+How is your team bridging the gap between demand signals and supply chain execution?
+
+===HASHTAGS===
+#RetailAI  #SupplyChainInnovation  #AWS  #InventoryOptimization  #DemandForecasting

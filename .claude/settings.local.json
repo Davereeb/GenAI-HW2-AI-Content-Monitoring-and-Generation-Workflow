@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -c ' *)",
+      "Bash(pip install *)",
+      "Bash(python task2_router.py)",
+      "Bash(python task3_classifier.py)",
+      "Bash(python task4_kol_research.py)",
+      "Bash(echo \"EXIT:$?\")",
+      "Bash(python task5_content_gen.py)"
+    ]
+  }
+}

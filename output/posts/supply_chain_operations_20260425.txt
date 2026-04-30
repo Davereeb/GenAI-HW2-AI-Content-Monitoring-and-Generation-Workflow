@@ -1,0 +1,20 @@
+Category: Supply Chain & Operations
+Source article: Introducing workspace agents in ChatGPT
+Source: OpenAI Blog
+Selection: combined: 7.7, recency: 5/10, final: 7.16
+Generated: 2026-04-25T15:08:51.662061+00:00
+============================================================
+
+What if your retail team could automate 30% of supply chain workflows overnight? OpenAI's new workspace agents in ChatGPT are about to make that possible. These Codex-powered agents don't just answer questions—they execute complex operations across your tech stack while maintaining security protocols. 
+
+For retail leaders, this means:
+• Automated purchase order reconciliation between ERP and vendor portals
+• Real-time exception handling for delayed shipments without human intervention
+• Dynamic rerouting of inventory based on live demand signals
+
+The most forward-thinking retailers will use these agents to turn their supply chain teams from firefighters into strategists. Imagine your planners spending less time chasing data and more time optimizing assortments.
+
+Question: Which repetitive supply chain task would you automate first with AI agents?
+
+===HASHTAGS===
+#RetailAI  #SupplyChainInnovation  #DigitalTransformation  #ChatGPT  #RetailTech

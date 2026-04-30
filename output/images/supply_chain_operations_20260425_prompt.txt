@@ -1,0 +1,3 @@
+DALL-E prompt for: Supply Chain & Operations
+
+An AI-powered distribution warehouse with autonomous robotic systems moving inventory, real-time data dashboards glowing on screens, clean industrial aesthetic, soft blue lighting. Photorealistic, professional editorial style, 16:9 format, no text overlays, no logos. Visual context: Introducing workspace agents in ChatGPT.

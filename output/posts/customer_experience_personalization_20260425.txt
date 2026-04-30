@@ -1,0 +1,20 @@
+Category: Customer Experience & Personalization
+Source article: Introducing workspace agents in ChatGPT
+Source: OpenAI Blog
+Selection: combined: 7.7, recency: 5/10, final: 7.16
+Generated: 2026-04-25T15:08:41.492154+00:00
+============================================================
+
+What if your retail team could automate 80% of repetitive customer service workflows—while maintaining brand voice and security? OpenAI's new workspace agents in ChatGPT show us how. 
+
+These AI agents don't just answer questions—they execute multi-step processes across your tech stack. Imagine:
+• Automating personalized post-purchase follow-ups at scale
+• Resolving complex returns by accessing order + inventory systems
+• Generating real-time product recommendations during live chats
+
+The key insight? Retail AI isn't about replacing human teams—it's about empowering them to focus where they add unique value (empathetic problem-solving, creative merchandising).
+
+Question: Which repetitive workflow would you automate first with AI agents?
+
+===HASHTAGS===
+#RetailAI  #CustomerExperience  #DigitalTransformation  #ChatGPT  #FutureOfRetail

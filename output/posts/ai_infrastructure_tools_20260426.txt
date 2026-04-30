@@ -1,0 +1,15 @@
+Category: AI Infrastructure & Tools
+KOL Style: Kai-Fu Lee
+Source article: Introducing GPT-5.5
+Source: OpenAI Blog
+Selection: KOL: Kai-Fu Lee | combined: 7.8, recency: 5/10, final: 7.24
+Generated: 2026-04-26T08:56:08.136438+00:00
+============================================================
+
+{
+  "post_text": "By 2025, AI will power 80% of retail decisions—and GPT-5.5 is the engine that will make this inevitable. With its enhanced capabilities for complex tasks and seamless tool integration, retailers now have unprecedented opportunities to transform operations and customer experiences. \n\nImagine leveraging GPT-5.5 to: \n• Automate personalized product recommendations across millions of SKUs\n• Generate real-time insights from purchase patterns to optimize inventory\n• Enhance chatbots to resolve customer inquiries in seconds with human-like precision \n\nThe key isn’t just adopting AI—it’s embedding it into every layer of your retail strategy. How will you harness GPT-5.5 to stay ahead in this AI-driven era?",
+  "hashtags": ["#RetailAI", "#GPT55", #CustomerExperience", "#RetailInnovation", "#AIFuture"]
+}
+
+===HASHTAGS===
+#RetailAI  #AIinRetail  #DigitalRetail  #RetailTech
