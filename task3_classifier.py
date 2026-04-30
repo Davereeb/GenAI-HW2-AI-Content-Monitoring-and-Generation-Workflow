@@ -36,8 +36,9 @@ def clean_json(text: str) -> str:
     return re.sub(r"```(?:json)?\n?|\n?```", "", text).strip()
 
 
-def classify_article(article: dict) -> tuple[str, str, str]:
-    """Call Claude to classify one article. Returns (category, confidence, reason)."""
+def classify_article(article: dict) -> tuple[str, str, str, str]:
+    """Call the LLM to classify one article.
+    Returns (category, confidence, reason, business_impact)."""
     user_msg = CLASSIFICATION_USER.format(
         title=article["title"],
         source=article["source"],
@@ -47,7 +48,7 @@ def classify_article(article: dict) -> tuple[str, str, str]:
     try:
         response = client.chat.completions.create(
             model=CLASSIFICATION_MODEL,
-            max_tokens=200,
+            max_tokens=250,
             messages=[
                 {"role": "system", "content": CLASSIFICATION_SYSTEM},
                 {"role": "user", "content": user_msg},
@@ -55,19 +56,24 @@ def classify_article(article: dict) -> tuple[str, str, str]:
         )
         raw = response.choices[0].message.content
         data = json.loads(clean_json(raw))
-        category   = data.get("category", DEFAULT_CATEGORY)
-        confidence = data.get("confidence", "medium")
-        reason     = data.get("reason", "")
+        category       = data.get("category", DEFAULT_CATEGORY)
+        confidence     = data.get("confidence", "medium")
+        reason         = data.get("reason", "")
+        business_impact = data.get("business_impact", "")
 
         # Validate — must exactly match one of the 5 allowed categories
         if category not in CATEGORIES:
             print(f"    [WARN] Unknown category '{category}' — defaulting to '{DEFAULT_CATEGORY}'")
             category = DEFAULT_CATEGORY
 
-        return category, confidence, reason
+        valid_impacts = {"cost_reduction", "revenue_growth", "risk_mitigation", "customer_satisfaction"}
+        if business_impact not in valid_impacts:
+            business_impact = ""
+
+        return category, confidence, reason, business_impact
     except Exception as e:
         print(f"    [WARN] Classification failed for '{article['title'][:50]}': {e}")
-        return DEFAULT_CATEGORY, "low", "parse error — defaulted"
+        return DEFAULT_CATEGORY, "low", "parse error — defaulted", ""
 
 
 def apply_diversity_selection(conn: sqlite3.Connection) -> tuple[int, int]:
@@ -143,16 +149,20 @@ def run() -> str:
 
     for row in rows:
         article = dict(row)
-        category, confidence, reason = classify_article(article)
+        category, confidence, reason, business_impact = classify_article(article)
 
         conn.execute(
-            "UPDATE articles SET category=? WHERE id=?",
-            (category, article["id"]),
+            """UPDATE articles
+               SET category=?, classification_confidence=?,
+                   classification_reason=?, business_impact=?
+               WHERE id=?""",
+            (category, confidence, reason, business_impact, article["id"]),
         )
         conn.commit()
         counts[category] += 1
 
-        print(f"  [{confidence.upper():6s}] {category}")
+        impact_label = f" [{business_impact}]" if business_impact else ""
+        print(f"  [{confidence.upper():6s}] {category}{impact_label}")
         print(f"           {article['title'][:65]}")
         print(f"           Reason: {reason}")
 

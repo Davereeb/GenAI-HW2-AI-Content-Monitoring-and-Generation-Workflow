@@ -31,21 +31,24 @@ from config import (
 def init_db(conn: sqlite3.Connection) -> None:
     conn.executescript("""
         CREATE TABLE IF NOT EXISTS articles (
-            id               INTEGER PRIMARY KEY AUTOINCREMENT,
-            url              TEXT UNIQUE NOT NULL,
-            title            TEXT NOT NULL,
-            source           TEXT NOT NULL,
-            published        TEXT,
-            summary          TEXT,
-            snippet          TEXT,
-            fetched_at       TEXT NOT NULL,
-            ai_score         REAL DEFAULT NULL,
-            retail_score     REAL DEFAULT NULL,
-            combined_score   REAL DEFAULT NULL,
-            ai_reason        TEXT DEFAULT NULL,
-            retail_reason    TEXT DEFAULT NULL,
-            is_relevant      INTEGER DEFAULT NULL,
-            category         TEXT DEFAULT NULL
+            id                        INTEGER PRIMARY KEY AUTOINCREMENT,
+            url                       TEXT UNIQUE NOT NULL,
+            title                     TEXT NOT NULL,
+            source                    TEXT NOT NULL,
+            published                 TEXT,
+            summary                   TEXT,
+            snippet                   TEXT,
+            fetched_at                TEXT NOT NULL,
+            ai_score                  REAL DEFAULT NULL,
+            retail_score              REAL DEFAULT NULL,
+            combined_score            REAL DEFAULT NULL,
+            ai_reason                 TEXT DEFAULT NULL,
+            retail_reason             TEXT DEFAULT NULL,
+            is_relevant               INTEGER DEFAULT NULL,
+            category                  TEXT DEFAULT NULL,
+            classification_confidence TEXT DEFAULT NULL,
+            classification_reason     TEXT DEFAULT NULL,
+            business_impact           TEXT DEFAULT NULL
         );
 
         CREATE TABLE IF NOT EXISTS kol_styles (
@@ -65,21 +68,35 @@ def init_db(conn: sqlite3.Connection) -> None:
             hashtags         TEXT,
             selection_reason TEXT,
             image_path       TEXT,
-            generated_at     TEXT NOT NULL
+            generated_at     TEXT NOT NULL,
+            quality_scores   TEXT DEFAULT NULL,
+            quality_avg      REAL DEFAULT NULL
         );
     """)
-    # Add new columns to existing articles tables (safe if already present)
+    # Add new columns to existing tables (safe if already present — ALTER TABLE
+    # raises an error if the column exists, which we silently ignore)
     for col, typedef in [
-        ("ai_score",       "REAL DEFAULT NULL"),
-        ("retail_score",   "REAL DEFAULT NULL"),
-        ("combined_score", "REAL DEFAULT NULL"),
-        ("ai_reason",      "TEXT DEFAULT NULL"),
-        ("retail_reason",  "TEXT DEFAULT NULL"),
+        ("ai_score",                  "REAL DEFAULT NULL"),
+        ("retail_score",              "REAL DEFAULT NULL"),
+        ("combined_score",            "REAL DEFAULT NULL"),
+        ("ai_reason",                 "TEXT DEFAULT NULL"),
+        ("retail_reason",             "TEXT DEFAULT NULL"),
+        ("classification_confidence", "TEXT DEFAULT NULL"),
+        ("classification_reason",     "TEXT DEFAULT NULL"),
+        ("business_impact",           "TEXT DEFAULT NULL"),
     ]:
         try:
             conn.execute(f"ALTER TABLE articles ADD COLUMN {col} {typedef}")
         except Exception:
             pass  # column already exists
+    for col, typedef in [
+        ("quality_scores", "TEXT DEFAULT NULL"),
+        ("quality_avg",    "REAL DEFAULT NULL"),
+    ]:
+        try:
+            conn.execute(f"ALTER TABLE generated_posts ADD COLUMN {col} {typedef}")
+        except Exception:
+            pass
     conn.commit()
 
 

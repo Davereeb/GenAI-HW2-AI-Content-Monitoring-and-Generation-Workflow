@@ -42,6 +42,35 @@ from prompts.generation_prompt import (
     get_dalle_prompt,
 )
 
+# ── LLM-as-Judge prompts ──────────────────────────────────────────────────────
+JUDGE_SYSTEM = """You are a senior LinkedIn content editor specialising in AI thought leadership for the retail industry.
+
+Evaluate the post on FOUR dimensions (each scored 1–10):
+• hook_strength        — Does the opening immediately grab attention? No clichés like "Excited to share" or "game-changer"?
+• retail_specificity   — Is the retail pain point concrete and named? Does it move beyond generic AI hype to a specific business problem?
+• kol_authenticity     — Does the writing feel like a genuine thought leader — varied rhythm, specific data or examples, real insight?
+• engagement_potential — Would a retail executive pause, think, and want to comment or share?
+
+Scoring guide: 9-10 = exceptional, 7-8 = solid, 5-6 = acceptable, below 5 = weak.
+
+If the AVERAGE score is below 7.5, rewrite the FULL post to address the weakest dimensions while preserving the KOL's style.
+If average ≥ 7.5, set revised_post to null — no rewrite needed.
+
+Return ONLY valid JSON (no markdown):
+{"scores": {"hook_strength": <int>, "retail_specificity": <int>, "kol_authenticity": <int>, "engagement_potential": <int>}, "average": <float>, "feedback": "<one sentence: main strength or weakness>", "revised_post": "<full improved post text, or null>"}"""
+
+JUDGE_USER = """Evaluate this LinkedIn post written for retail executives:
+
+---
+{post_text}
+---
+
+Category: {category}
+KOL writing style: {kol_name}
+Word count: {word_count} words
+
+Score each dimension carefully and provide a revised post if the average is below 7.5."""
+
 client = OpenAI(
     api_key=OPENROUTER_API_KEY,
     base_url=OPENROUTER_BASE_URL,
@@ -183,6 +212,44 @@ def _parse_post_response(raw: str) -> tuple[str, list[str]]:
     return cleaned, DEFAULT_HASHTAGS
 
 
+def judge_post(post_text: str, category: str, kol_name: str) -> dict:
+    """Run the LLM-as-judge on a generated post.
+    Returns a dict with keys: scores, average, feedback, revised_post (or None).
+    Falls back to a neutral result on any error — never crashes the pipeline.
+    """
+    word_count = len(post_text.split())
+    user_msg = JUDGE_USER.format(
+        post_text=post_text,
+        category=category,
+        kol_name=kol_name or "AI thought leader",
+        word_count=word_count,
+    )
+    try:
+        response = client.chat.completions.create(
+            model=GENERATION_MODEL,
+            max_tokens=800,
+            messages=[
+                {"role": "system", "content": JUDGE_SYSTEM},
+                {"role": "user",   "content": user_msg},
+            ],
+        )
+        raw = response.choices[0].message.content.strip()
+        cleaned = re.sub(r"```(?:json)?\s*", "", raw)
+        cleaned = re.sub(r"\s*```", "", cleaned).strip()
+        data = json.loads(cleaned)
+        scores = data.get("scores", {})
+        avg    = float(data.get("average", sum(scores.values()) / max(len(scores), 1)))
+        return {
+            "scores":       scores,
+            "average":      round(avg, 2),
+            "feedback":     data.get("feedback", ""),
+            "revised_post": data.get("revised_post"),
+        }
+    except Exception as e:
+        print(f"  [WARN] LLM judge failed: {e}")
+        return {"scores": {}, "average": 0.0, "feedback": "judge unavailable", "revised_post": None}
+
+
 def generate_post(article: dict, category: str, style_guide: dict,
                   kol_name: str = "", kol_profile: dict | None = None) -> tuple[str, list[str]]:
     """Call the LLM to generate a LinkedIn post in the style of a specific KOL.
@@ -318,17 +385,22 @@ def generate_image(category: str, article_title: str, cat_slug: str, date_str: s
 
 def save_to_db(conn: sqlite3.Connection, category: str, article: dict,
                post_text: str, hashtags: list[str],
-               selection_reason: str, image_path: str | None) -> None:
+               selection_reason: str, image_path: str | None,
+               quality_result: dict | None = None) -> None:
     """Persist the generated post to the generated_posts table.
     Replaces any existing post for the same category (one post per category).
     """
+    quality_scores_json = json.dumps(quality_result.get("scores", {})) if quality_result else None
+    quality_avg         = quality_result.get("average") if quality_result else None
+
     # Deduplication: remove stale post for this category before inserting the new one
     conn.execute("DELETE FROM generated_posts WHERE category = ?", (category,))
     conn.execute(
         """INSERT INTO generated_posts
            (category, article_title, article_source, article_url,
-            post_text, hashtags, selection_reason, image_path, generated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            post_text, hashtags, selection_reason, image_path, generated_at,
+            quality_scores, quality_avg)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (
             category,
             article.get("title", ""),
@@ -339,6 +411,8 @@ def save_to_db(conn: sqlite3.Connection, category: str, article: dict,
             selection_reason,
             image_path or "",
             datetime.now(timezone.utc).isoformat(),
+            quality_scores_json,
+            quality_avg,
         ),
     )
     conn.commit()
@@ -391,6 +465,18 @@ def run() -> str:
         print(f"  Generating post in style of {kol_name}...")
         post_text, hashtags = generate_post(article, category, style_guide, kol_name, kol_profile)
 
+        # ── LLM-as-judge: evaluate quality and optionally revise ──────────────
+        print(f"  Running LLM quality judge…")
+        quality_result = judge_post(post_text, category, kol_name)
+        avg  = quality_result.get("average", 0)
+        fb   = quality_result.get("feedback", "")
+        print(f"  Quality scores: {quality_result.get('scores', {})}  avg={avg:.1f}/10")
+        print(f"  Feedback: {fb}")
+        if quality_result.get("revised_post"):
+            print(f"  [IMPROVED] Judge revised post (avg was {avg:.1f} < 7.5) — using revision")
+            post_text = quality_result["revised_post"]
+            quality_result["average"] = avg   # keep original avg for logging
+
         # Save post to file (body + separator + hashtags)
         cat_slug  = slug(category)
         post_path = os.path.join(OUTPUT_POSTS_DIR, f"{cat_slug}_{date_str}.txt")
@@ -400,6 +486,7 @@ def run() -> str:
             f.write(f"Source article: {article['title']}\n")
             f.write(f"Source: {article['source']}\n")
             f.write(f"Selection: {sel_reason_full}\n")
+            f.write(f"Quality: {avg:.1f}/10  ({fb})\n")
             f.write(f"Generated: {datetime.now(timezone.utc).isoformat()}\n")
             f.write("=" * 60 + "\n\n")
             f.write(post_text)
@@ -418,7 +505,7 @@ def run() -> str:
             print(f"  Image saved: {img_path}")
 
         # Persist to DB history
-        save_to_db(conn, category, article, post_text, hashtags, sel_reason, img_path)
+        save_to_db(conn, category, article, post_text, hashtags, sel_reason, img_path, quality_result)
 
         generated.append((category, post_path, img_path))
 

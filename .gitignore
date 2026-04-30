@@ -29,3 +29,5 @@ env/
 
 # Assignment report — submitted separately to teacher
 task6_report.md
+task6_report.docx
+build_report_docx.py

@@ -12,6 +12,7 @@ import math
 import re
 import sqlite3
 import time
+from datetime import datetime, timedelta, timezone
 
 from openai import OpenAI
 
@@ -41,6 +42,34 @@ client = OpenAI(
 
 def clean_json(text: str) -> str:
     return re.sub(r"```(?:json)?\n?|\n?```", "", text).strip()
+
+
+def recency_bonus(published_str: str) -> float:
+    """Return a small score bonus for recently published articles (max +0.5).
+    Used as a tiebreaker — recent articles are preferred when scores are close.
+    """
+    if not published_str:
+        return 0.0
+    now = datetime.now(timezone.utc)
+    for fmt in (
+        "%a, %d %b %Y %H:%M:%S %z",
+        "%a, %d %b %Y %H:%M:%S GMT",
+        "%Y-%m-%dT%H:%M:%S%z",
+        "%Y-%m-%dT%H:%M:%SZ",
+        "%Y-%m-%dT%H:%M:%S+00:00",
+    ):
+        try:
+            pub = datetime.strptime(published_str, fmt)
+            if pub.tzinfo is None:
+                pub = pub.replace(tzinfo=timezone.utc)
+            age = now - pub
+            if age < timedelta(hours=24):  return 0.5
+            if age < timedelta(hours=48):  return 0.3
+            if age < timedelta(days=7):    return 0.1
+            return 0.0
+        except ValueError:
+            continue
+    return 0.0
 
 
 def reset_scores(conn: sqlite3.Connection) -> int:
@@ -75,22 +104,32 @@ def score_article(article: dict) -> dict | None:
         data = json.loads(clean_json(raw))
         ai_score     = max(1, min(10, int(data.get("ai_score", 5))))
         retail_score = max(1, min(10, int(data.get("retail_score", 5))))
+        r_bonus      = recency_bonus(article.get("published", ""))
+        combined     = round(ai_score * AI_WEIGHT + retail_score * RETAIL_WEIGHT + r_bonus, 2)
         return {
             "ai_score":     ai_score,
             "retail_score": retail_score,
             "ai_reason":    data.get("ai_reason", ""),
             "retail_reason":data.get("retail_reason", ""),
-            "combined":     round(ai_score * AI_WEIGHT + retail_score * RETAIL_WEIGHT, 2),
+            "combined":     combined,
+            "recency_bonus": r_bonus,
         }
     except Exception as e:
         print(f"    [WARN] Scoring failed for '{article['title'][:50]}': {e}")
         return None
 
 
-def run(force_rescore: bool = False) -> str:
+def run(force_rescore: bool = False, score_min_override: int | None = None) -> str:
     """Entry point for workflow.py / app.py.
-    force_rescore=True resets all scores before running (used by the UI reset button).
+    force_rescore=True   — resets all scores before running (used by the UI reset button).
+    score_min_override   — if set, overrides both AI_SCORE_MIN and RETAIL_SCORE_MIN
+                           (used by the workflow diversity-retry feedback loop).
     """
+    ai_min     = score_min_override if score_min_override is not None else AI_SCORE_MIN
+    retail_min = score_min_override if score_min_override is not None else RETAIL_SCORE_MIN
+    if score_min_override is not None:
+        print(f"  [OVERRIDE] Mandatory minimums relaxed to {score_min_override} (diversity retry)")
+
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
 
@@ -99,7 +138,7 @@ def run(force_rescore: bool = False) -> str:
         print(f"  [RESET] Cleared scores for {n} articles")
 
     rows = conn.execute(
-        "SELECT id, title, source, summary FROM articles WHERE ai_score IS NULL OR ai_score < 0"
+        "SELECT id, title, source, summary, published FROM articles WHERE ai_score IS NULL OR ai_score < 0"
     ).fetchall()
 
     if not rows:
@@ -144,8 +183,10 @@ def run(force_rescore: bool = False) -> str:
                 "ai_reason":     result["ai_reason"],
                 "retail_reason": result["retail_reason"],
             })
-            print(f"  [AI:{result['ai_score']:2d} RT:{result['retail_score']:2d} "
-                  f"=> {result['combined']:.1f}] {article['title'][:55]}")
+            rb = result.get("recency_bonus", 0)
+            rb_str = f" +{rb}✨" if rb > 0 else ""
+            print(f"  [AI:{result['ai_score']:2d} RT:{result['retail_score']:2d}"
+                  f"{rb_str} => {result['combined']:.1f}] {article['title'][:55]}")
             print(f"           AI: {result['ai_reason']}")
             print(f"           Retail: {result['retail_reason']}")
 
@@ -156,12 +197,12 @@ def run(force_rescore: bool = False) -> str:
     # (Top-N% filtering is removed here; Task 3 does diversity-aware final selection)
     passing = [
         a for a in scored_articles
-        if a["ai_score"] >= AI_SCORE_MIN and a["retail_score"] >= RETAIL_SCORE_MIN
+        if a["ai_score"] >= ai_min and a["retail_score"] >= retail_min
     ]
     eliminated = len(scored_articles) - len(passing)
     if eliminated:
         print(f"\n  [FILTER] {eliminated} articles eliminated "
-              f"(ai_score < {AI_SCORE_MIN} OR retail_score < {RETAIL_SCORE_MIN})")
+              f"(ai_score < {ai_min} OR retail_score < {retail_min})")
 
     # Mark ALL passing articles as relevant candidates for Task 3 classification
     selected_ids = [a["id"] for a in passing]

@@ -15,8 +15,14 @@ Classification rules:
 - "Governance, Ethics & Regulation" covers AI policy, safety, bias, compliance, and data privacy
 - "Pricing & Revenue Management" includes demand forecasting, promotions, and dynamic pricing
 
+Also identify the PRIMARY business impact for a retail executive:
+- "cost_reduction"       — reduces operating costs, headcount, or waste
+- "revenue_growth"       — drives sales, conversion rate, or customer loyalty
+- "risk_mitigation"      — addresses compliance, fraud, supply chain risk, or data privacy
+- "customer_satisfaction"— improves customer experience, personalization, or service quality
+
 Respond with ONLY a valid JSON object — no markdown, no extra text:
-{"category": "<exact category name from the list>", "confidence": "<high|medium|low>", "reason": "<one concise sentence>"}"""
+{"category": "<exact category name from the list>", "confidence": "<high|medium|low>", "reason": "<one concise sentence explaining the classification>", "business_impact": "<cost_reduction|revenue_growth|risk_mitigation|customer_satisfaction>"}"""
 
 CLASSIFICATION_USER = """Article title: {title}
 Source: {source}

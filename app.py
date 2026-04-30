@@ -48,6 +48,32 @@ from scheduler import get_next_run_time, start_scheduler
 # Start background scheduler (idempotent — safe on every page reload)
 start_scheduler()
 
+# Run DB migrations (adds new columns to existing DB safely)
+if os.path.exists(DB_PATH):
+    try:
+        _mc = sqlite3.connect(DB_PATH)
+        for _col, _typedef in [
+            ("classification_confidence", "TEXT DEFAULT NULL"),
+            ("classification_reason",     "TEXT DEFAULT NULL"),
+            ("business_impact",           "TEXT DEFAULT NULL"),
+        ]:
+            try:
+                _mc.execute(f"ALTER TABLE articles ADD COLUMN {_col} {_typedef}")
+            except Exception:
+                pass
+        for _col, _typedef in [
+            ("quality_scores", "TEXT DEFAULT NULL"),
+            ("quality_avg",    "REAL DEFAULT NULL"),
+        ]:
+            try:
+                _mc.execute(f"ALTER TABLE generated_posts ADD COLUMN {_col} {_typedef}")
+            except Exception:
+                pass
+        _mc.commit()
+        _mc.close()
+    except Exception:
+        pass
+
 # ── Utilities ──────────────────────────────────────────────────────────────────
 
 def run_task(module_name: str) -> tuple[str, str]:
@@ -87,7 +113,8 @@ def query_articles(where: str = "1=1") -> pd.DataFrame:
     conn = sqlite3.connect(DB_PATH)
     df = pd.read_sql(
         f"SELECT title, source, published, ai_score, retail_score, combined_score, "
-        f"is_relevant, category "
+        f"is_relevant, category, "
+        f"classification_confidence, classification_reason, business_impact "
         f"FROM articles WHERE {where} ORDER BY fetched_at DESC",
         conn,
     )
@@ -102,7 +129,8 @@ def query_generated_posts(where: str = "1=1") -> pd.DataFrame:
     try:
         df = pd.read_sql(
             f"SELECT id, category, article_title, article_source, "
-            f"post_text, hashtags, selection_reason, image_path, generated_at "
+            f"post_text, hashtags, selection_reason, image_path, generated_at, "
+            f"quality_scores, quality_avg "
             f"FROM generated_posts WHERE {where} ORDER BY generated_at DESC",
             conn,
         )
@@ -382,11 +410,28 @@ with t3:
             plt.close(fig)
 
         with col_table:
-            st.dataframe(
-                df[["title", "source", "category", "combined_score"]],
-                use_container_width=True,
-                hide_index=True,
+            # Business impact emoji legend
+            IMPACT_EMOJI = {
+                "cost_reduction":        "💰 Cost Reduction",
+                "revenue_growth":        "📈 Revenue Growth",
+                "risk_mitigation":       "🛡️ Risk Mitigation",
+                "customer_satisfaction": "⭐ Customer Satisfaction",
+            }
+            display_t3 = df[["title", "source", "category",
+                              "combined_score", "classification_confidence",
+                              "business_impact", "classification_reason"]].copy()
+            display_t3["business_impact"] = display_t3["business_impact"].map(
+                lambda v: IMPACT_EMOJI.get(v, v or "—")
             )
+            display_t3["classification_confidence"] = display_t3["classification_confidence"].map(
+                lambda v: {"high": "🟢 High", "medium": "🟡 Medium", "low": "🔴 Low"}.get(v, v or "—")
+            )
+            display_t3 = display_t3.rename(columns={
+                "classification_confidence": "confidence",
+                "classification_reason":     "reason",
+                "business_impact":           "business impact",
+            })
+            st.dataframe(display_t3, use_container_width=True, hide_index=True)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # TAB 4 — KOL Research
@@ -571,15 +616,20 @@ with t5:
         st.subheader(f"Latest Posts — {len(posts_df)} categories")
         for _, row in posts_df.iterrows():
             with st.container(border=True):
-                # Header: category + KOL badge
+                # Header: category + KOL badge + quality score badge
                 sel = row.get("selection_reason", "")
                 kol_label = ""
                 if "KOL:" in sel:
                     kol_label = sel.split("|")[0].replace("KOL:", "").strip()
-                header_cols = st.columns([4, 1])
+                quality_avg = row.get("quality_avg")
+                header_cols = st.columns([3, 1, 1])
                 header_cols[0].markdown(f"#### {row['category']}")
                 if kol_label:
                     header_cols[1].info(f"✍️ {kol_label}")
+                if quality_avg and float(quality_avg) > 0:
+                    qa = float(quality_avg)
+                    q_color = "🟢" if qa >= 8 else "🟡" if qa >= 7 else "🔴"
+                    header_cols[2].metric("Quality", f"{q_color} {qa:.1f}/10")
 
                 # Source attribution
                 st.caption(
@@ -633,6 +683,25 @@ with t5:
 
                     with st.expander("🎨 Image Prompt — copy to 通义万相 / Midjourney"):
                         st.code(saved_prompt, language=None)
+
+                # Quality score detail (below the two-column layout)
+                qs_raw = row.get("quality_scores")
+                if qs_raw:
+                    try:
+                        qs = json.loads(qs_raw) if isinstance(qs_raw, str) else qs_raw
+                        if qs:
+                            with st.expander("📊 LLM Quality Evaluation"):
+                                qcols = st.columns(len(qs))
+                                labels = {
+                                    "hook_strength":        "🎣 Hook",
+                                    "retail_specificity":   "🛍️ Retail Fit",
+                                    "kol_authenticity":     "🧑 KOL Voice",
+                                    "engagement_potential": "💬 Engagement",
+                                }
+                                for qcol, (dim, score) in zip(qcols, qs.items()):
+                                    qcol.metric(labels.get(dim, dim), f"{score}/10")
+                    except Exception:
+                        pass
 
 # ─────────────────────────────────────────────────────────────────────────────
 # TAB 6 — History
