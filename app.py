@@ -237,11 +237,20 @@ with t1:
     if not df.empty:
         st.subheader(f"Articles in DB — {len(df)} total")
         display_t1 = df[["title", "source", "published"]].copy()
-        display_t1["published"] = (
-            pd.to_datetime(display_t1["published"], utc=True, errors="coerce")
-            .dt.strftime("%Y-%m-%d")
-            .fillna("")
-        )
+        def _fmt_date(val):
+            if not val:
+                return ""
+            try:
+                import email.utils
+                parsed = email.utils.parsedate_to_datetime(str(val))
+                return parsed.strftime("%Y-%m-%d")
+            except Exception:
+                pass
+            try:
+                return pd.to_datetime(str(val), utc=True, errors="coerce").strftime("%Y-%m-%d")
+            except Exception:
+                return str(val)[:10]
+        display_t1["published"] = display_t1["published"].apply(_fmt_date)
         st.dataframe(display_t1, use_container_width=True, hide_index=True)
 
 # ─────────────────────────────────────────────────────────────────────────────
