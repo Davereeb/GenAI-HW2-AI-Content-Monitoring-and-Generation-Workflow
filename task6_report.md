@@ -107,6 +107,19 @@ The same pattern was applied to KOL profile parsing in Task 4.
 
 ---
 
+### Challenge 6 — Duplicate Posts Across Runs
+
+**Problem:** Running Task 5 multiple times (e.g., during testing) accumulated duplicate posts in the database. The `save_to_db()` function used a plain `INSERT` with no conflict check, so each run added new rows for the same categories. The DB trim kept the 5 most recent rows globally — meaning after two runs of 3 categories, the display could show 3 posts for "AI Infrastructure & Tools" and only 1 each for the other two. This broke the requirement of showing at least 3 different categories.
+
+**Resolution:** Three-layer deduplication:
+1. **`save_to_db()`** — `DELETE FROM generated_posts WHERE category = ?` before every `INSERT`, ensuring at most one post per category exists at any time
+2. **DB trim** — changed from "latest 5 rows globally" to `DELETE WHERE id NOT IN (SELECT MAX(id) ... GROUP BY category)`, keeping exactly the latest post per category
+3. **Display query in `app.py`** — `SELECT MAX(id) ... GROUP BY category` ensures the UI always shows one post per category, even if stale duplicates somehow exist
+
+**Result:** The database now contains exactly 3 rows (one per target category), and the display always shows uniquely-categorised, non-duplicate content.
+
+---
+
 ## 3. Workflow and Prompt Optimization Progress
 
 ### 3.1 Task 2 — Single Score → Two-Dimension Scoring
@@ -180,6 +193,7 @@ The same pattern was applied to KOL profile parsing in Task 4.
 | 4 | **Cache expensive operations explicitly.** KOL style analysis (5 LLM calls, ~5,000 tokens each) runs once and is reused indefinitely. Making the cache visible to the user (the "Force Re-analyze" button) builds trust and avoids confusion. |
 | 5 | **Separation of concerns reduces debugging time.** When Task 2 scoring was broken (all scores = 0), the issue was isolated to one file without touching the rest of the pipeline. |
 | 6 | **Async APIs require polling discipline.** DashScope's image API is genuinely asynchronous. Careful retry logic with clear timeout messaging prevents silent hangs. |
+| 7 | **Idempotency must be designed in from the start.** Any pipeline step that writes to a database needs an upsert or delete-before-insert strategy. Plain `INSERT` accumulates duplicates silently across test runs — only visible when the UI displays unexpected repeated content. |
 
 ---
 

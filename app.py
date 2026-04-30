@@ -554,12 +554,12 @@ with t5:
 
     from prompts.generation_prompt import get_dalle_prompt
 
-    # Show only the 5 most recent posts (DB is also trimmed to 5 after each run)
+    # Show the latest post per category (deduplicated — at most 1 per category)
     posts_df = query_generated_posts(
-        "id IN (SELECT id FROM generated_posts ORDER BY generated_at DESC LIMIT 5)"
+        "id IN (SELECT MAX(id) FROM generated_posts GROUP BY category)"
     )
     if not posts_df.empty:
-        st.subheader(f"Latest Posts — {len(posts_df)} total")
+        st.subheader(f"Latest Posts — {len(posts_df)} categories")
         for _, row in posts_df.iterrows():
             with st.container(border=True):
                 # Header: category + KOL badge

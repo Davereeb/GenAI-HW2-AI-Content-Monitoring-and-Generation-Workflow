@@ -319,7 +319,11 @@ def generate_image(category: str, article_title: str, cat_slug: str, date_str: s
 def save_to_db(conn: sqlite3.Connection, category: str, article: dict,
                post_text: str, hashtags: list[str],
                selection_reason: str, image_path: str | None) -> None:
-    """Persist the generated post to the generated_posts table."""
+    """Persist the generated post to the generated_posts table.
+    Replaces any existing post for the same category (one post per category).
+    """
+    # Deduplication: remove stale post for this category before inserting the new one
+    conn.execute("DELETE FROM generated_posts WHERE category = ?", (category,))
     conn.execute(
         """INSERT INTO generated_posts
            (category, article_title, article_source, article_url,
@@ -418,15 +422,16 @@ def run() -> str:
 
         generated.append((category, post_path, img_path))
 
-    # ── Trim DB: keep only the 5 most recent posts ────────────────────────────
+    # ── Trim DB: keep only the latest post per category (deduplication) ─────────
     conn.execute(
         """DELETE FROM generated_posts
            WHERE id NOT IN (
-               SELECT id FROM generated_posts ORDER BY generated_at DESC LIMIT 5
+               SELECT MAX(id) FROM generated_posts GROUP BY category
            )"""
     )
     conn.commit()
-    print(f"  [DB] Trimmed generated_posts to 5 most recent entries.")
+    remaining = conn.execute("SELECT COUNT(*) FROM generated_posts").fetchone()[0]
+    print(f"  [DB] Deduplicated: {remaining} unique-category posts retained.")
 
     conn.close()
 
